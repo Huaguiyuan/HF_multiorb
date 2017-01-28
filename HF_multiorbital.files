@@ -1,3 +1,5 @@
 a.out
-Engine.cpp
+main.cpp
+Engine.h
+tensor_type.h
 README.md

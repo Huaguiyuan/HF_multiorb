@@ -16,16 +16,5 @@ int main(int argc, char** argv){
 
 
 
-
-    Hamiltonian.resize(Hamil_size);
-    for(int i=0;i<Hamil_size;i++){
-    Hamiltonian[i].resize(Hamil_Size);
-    }
-
-
-    Construct_KE_part(Hamiltonian);
-
-
-
     return 0;
 }

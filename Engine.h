@@ -28,6 +28,16 @@ public:
     double U, U_p, J_H;   //U,U_p=Onsite coloumbic int, J_H=Onsite Hunds coupling(See Notes)
     Mat_1_doub onsite_potential; //Crystal_field_splitting,disorder etc goes here
 
+    double Convergence_error_n_up, Convergence_error_n_dn; //Convergence_errors for order parameters
+    double diff_n_up, diff_n_dn;
+    double Alpha_n_up, Alpha_n_dn;
+
+
+    bool Simple_Mixing_bool, Broyden_bool;
+
+    Mat_1_doub n_up_in, n_dn_in;
+    Mat_1_doub n_up_out, n_dn_out;
+
     //----------------------------------------------------------------//
 
 
@@ -36,6 +46,9 @@ public:
     void Initialize_parameters();
     void Initialize_Tensors();
 
+    void Construct_Hamiltonian();
+    void Diagonalize_Hamiltonian();
+    void Calculate_order_parameters_out();
     void Add_Kinetic_E_part();
     void Add_Spin_orbit_part();
     void Add_Interaction_part();
@@ -53,8 +66,13 @@ void Hartree_Fock_Engine::read_INPUT(){
     N_e_PerSite = 4;
     onsite_potential.resize(2*N_orb*Length_x*Length_y*Length_z);
     for(int i=0;i<2*N_orb*Length_x*Length_y*Length_z;i++){
-        onsite_potential[i]=0;
+        onsite_potential[i ]= 0;
     }
+
+    Simple_Mixing_bool = true;
+    Broyden_bool = false;
+    Convergence_error_n_up=10e-4;
+    Convergence_error_n_dn=10e-4;
 
     //---------------------------------------------------------------//
 }
@@ -81,6 +99,27 @@ void Hartree_Fock_Engine::Initialize_Tensors(){
 
 }
 
+void Hartree_Fock_Engine::Construct_Hamiltonian(){
+
+
+    for(int i=0;i<Hamil_Size;i++){
+        for(int j=0;j<Hamil_Size;j++){
+        Hamiltonian[i][j]=0;
+        }
+    }
+
+    Add_Kinetic_E_part();
+    Add_Interaction_part();
+
+}
+
+void Hartree_Fock_Engine::Diagonalize_Hamiltonian(){
+
+}
+
+void Hartree_Fock_Engine::Calculate_order_parameters_out(){
+
+}
 
 void Hartree_Fock_Engine::Add_Kinetic_E_part(){
 

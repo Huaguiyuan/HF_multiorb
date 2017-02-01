@@ -37,7 +37,7 @@ int main(int argc, char** argv)
 
 
 
-
+    //checking if Engine should continue to run or stop----------------------------//
         if( (HF_Engine.diff_n_up > HF_Engine.Convergence_error_n_up)
                 || (HF_Engine.diff_n_up > HF_Engine.Convergence_error_n_dn) )
         {
@@ -47,6 +47,8 @@ int main(int argc, char** argv)
         {
             Convergence_gained=true;
         }
+
+     //---------------------------------------------------------------------------//
 
     }
 

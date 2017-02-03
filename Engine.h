@@ -26,6 +26,8 @@ public:
     int N_e_PerSite, N_e_Total;    //No of  e's per site and total
     Mat_2_doub Hamiltonian;
     Mat_2_doub Hopping_connections;
+    int _SPIN_UP=0;
+    int _SPIN_DN=1;
 
 
     double U, U_p, J_H;   //U,U_p=Onsite coloumbic int, J_H=Onsite Hunds coupling(See Notes)
@@ -38,13 +40,15 @@ public:
 
     bool Simple_Mixing_bool, Broyden_bool;
 
-    Mat_1_doub n_up_in, n_dn_in, s_plus_in, s_minus_in;
-    Mat_5_doub CdagC;
+
+    Mat_6_doub CdagC_in;//[xi][yi][orb1][orb2][spin1][spin2]
+    Mat_6_doub CdagC_out;//[xi][yi][orb1][orb2][spin1][spin2]
     string n_up_in_file_str, n_dn_in_file_str; //files from where input order params are being read
     Mat_1_doub n_up_out, n_dn_out, s_plus_out, s_minus_out;
 
     //Classical energies
     double H1_classical, H2_classical, H3_classical, H4_classical;
+
 
     //----------------------------------------------------------------//
 
@@ -145,7 +149,7 @@ void Hartree_Fock_Engine::Add_Kinetic_E_part(){
     */
 
     /*
-    spin=up <=> spin_i=0, spin=dn <=> spin=1
+    spin=up <=> spin_i=_SPIN_UP, spin=dn <=> spin=_SPIN_DN
     orb_i \belongs {0,1,2}
     x_i \belongs {0,1..,Length_x-1}
     y_i \belongs {0,1..,Length_y-1}
@@ -173,22 +177,37 @@ void Hartree_Fock_Engine::Add_Kinetic_E_part(){
 void Hartree_Fock_Engine::Add_H1_part(){
 
     //Hartree term
-    for(int j=0;j<Hamil_Size;j++){
-        if(j<Hamil_Sizeby2){
-            Hamiltonian[j][j] = Hamiltonian[j][j] + U*n_up_in[j];
+    for(int x_i=0;x_i<Length_x;x_i++){
+        for(int y_i=0;y_i<Length_y;y_i++){
+            for(int orb=0;orb<N_orb;orb++){
+                for(int spin=0;spin<2;spin++){
+                    j=x_i + Length_x*y_i + Length_x*Length_y*orb +
+                            Length_x*Length_y*N_orb*spin;
+                    Hamiltonian[j][j] = Hamiltonian[j][j] + U*CdagC_in[x_i][y_i][orb][orb][spin][spin];
+                }
+            }
         }
-        else{
-            Hamiltonian[j][j] = Hamiltonian[j][j] + U*n_up_in[j-Hamil_Sizeby2];
-        }
-
     }
 
 
-    //Fock term
-    for(int j=0;j<Hamil_Sizeby2;j++){
-        Hamiltonian[j][j+Hamil_Sizeby2] = Hamiltonian[j][j+Hamil_Sizeby2] - U*s_minus_in[j];
-        Hamiltonian[j+Hamil_Sizeby2][j] = Hamiltonian[j+Hamil_Sizeby2][j] - U*s_plus_in[j];
 
+    //Fock term
+    for(int x_i=0;x_i<Length_x;x_i++){
+        for(int y_i=0;y_i<Length_y;y_i++){
+            for(int orb=0;orb<N_orb;orb++){
+                    j=x_i + Length_x*y_i + Length_x*Length_y*orb;
+
+                    Hamiltonian[j][j+Hamil_Sizeby2] =
+                            Hamiltonian[j][j+Hamil_Sizeby2] +
+                            U*CdagC_in[x_i][y_i][orb][orb][_SPIN_DN][_SPIN_UP];
+                    Hamiltonian[j+Hamil_Sizeby2][j] =
+                            Hamiltonian[j+Hamil_Sizeby2][j] +
+                            U*CdagC_in[x_i][y_i][orb][orb][_SPIN_UP][_SPIN_DN];
+
+
+
+            }
+        }
     }
 
 
@@ -197,8 +216,9 @@ void Hartree_Fock_Engine::Add_H1_part(){
 
 void Hartree_Fock_Engine::Add_H2_part(){
 
+    double _factor;
+     _factor = (U_p - J_H*0.5);
     //H_2 part 1(see notes)
-
     int spin_alpha, spin_beta;
     for(int x_i=0;x_i<Length_x;x_i++){
         for(int y_i=0;y_i<Length_y;y_i++){
@@ -214,7 +234,9 @@ void Hartree_Fock_Engine::Add_H2_part(){
                           Length_x*Length_y*N_orb*spin_beta;
 
                   Hamiltonian[j][j] = Hamiltonian[j][j] +
-                                      (U_p - J_H*0.5)*n_up_in[jp];
+                                      _factor*
+                                    CdagC_in[x_i][y_i][orb_beta][orb_beta][_SPIN_UP][_SPIN_UP];
+
 
                   //n_{i,alpha,up}<n_{i,beta,dn}>
                   spin_alpha=0;//up
@@ -225,7 +247,8 @@ void Hartree_Fock_Engine::Add_H2_part(){
                           Length_x*Length_y*N_orb*spin_beta;
 
                   Hamiltonian[j][j] = Hamiltonian[j][j] +
-                                      (U_p - J_H*0.5)*n_dn_in[jp-Hamil_Sizeby2];
+                                      _factor*
+                                        CdagC_in[x_i][y_i][orb_beta][orb_beta][_SPIN_DN][_SPIN_DN];
 
                   //n_{i,alpha,dn}<n_{i,beta,up}>
                   spin_alpha=1;//dn
@@ -236,7 +259,8 @@ void Hartree_Fock_Engine::Add_H2_part(){
                           Length_x*Length_y*N_orb*spin_beta;
 
                   Hamiltonian[j][j] = Hamiltonian[j][j] +
-                                      (U_p - J_H*0.5)*n_up_in[jp];
+                                      _factor*
+                                        CdagC_in[x_i][y_i][orb_beta][orb_beta][_SPIN_UP][_SPIN_UP];
 
                   //n_{i,alpha,dn}<n_{i,beta,dn}>
                   spin_alpha=1;//dn
@@ -247,7 +271,8 @@ void Hartree_Fock_Engine::Add_H2_part(){
                           Length_x*Length_y*N_orb*spin_beta;
 
                   Hamiltonian[j][j] = Hamiltonian[j][j] +
-                                      (U_p - J_H*0.5)*n_dn_in[jp-Hamil_Sizeby2];
+                                      _factor*
+                                       CdagC_in[x_i][y_i][orb_beta][orb_beta][_SPIN_DN][_SPIN_DN];
 
 
                   //n_{i,beta,up}<n_{i,alpha,up}>
@@ -259,7 +284,8 @@ void Hartree_Fock_Engine::Add_H2_part(){
                           Length_x*Length_y*N_orb*spin_beta;
 
                   Hamiltonian[jp][jp] = Hamiltonian[jp][jp] +
-                                      (U_p - J_H*0.5)*n_up_in[j];
+                                      _factor*
+                                        CdagC_in[x_i][y_i][orb_alpha][orb_alpha][_SPIN_UP][_SPIN_UP];
 
 
                   //n_{i,beta,up}<n_{i,alpha,dn}>
@@ -271,7 +297,8 @@ void Hartree_Fock_Engine::Add_H2_part(){
                           Length_x*Length_y*N_orb*spin_beta;
 
                   Hamiltonian[jp][jp] = Hamiltonian[jp][jp] +
-                                      (U_p - J_H*0.5)*n_dn_in[j-Hamil_Sizeby2];
+                                      _factor*
+                                         CdagC_in[x_i][y_i][orb_alpha][orb_alpha][_SPIN_DN][_SPIN_DN];
 
                   //n_{i,beta,dn}<n_{i,alpha,up}>
                   spin_alpha=0;//up
@@ -282,7 +309,8 @@ void Hartree_Fock_Engine::Add_H2_part(){
                           Length_x*Length_y*N_orb*spin_beta;
 
                   Hamiltonian[jp][jp] = Hamiltonian[jp][jp] +
-                                      (U_p - J_H*0.5)*n_up_in[j];
+                                      _factor*
+                                         CdagC_in[x_i][y_i][orb_alpha][orb_alpha][_SPIN_UP][_SPIN_UP];
 
                   //n_{i,beta,dn}<n_{i,alpha,dn}>
                   spin_alpha=1;//dn
@@ -293,7 +321,8 @@ void Hartree_Fock_Engine::Add_H2_part(){
                           Length_x*Length_y*N_orb*spin_beta;
 
                   Hamiltonian[jp][jp] = Hamiltonian[jp][jp] +
-                                      (U_p - J_H*0.5)*n_dn_in[j-Hamil_Sizeby2];
+                                      _factor*
+                                         CdagC_in[x_i][y_i][orb_alpha][orb_alpha][_SPIN_DN][_SPIN_DN];
 
 
                 }
@@ -307,7 +336,285 @@ void Hartree_Fock_Engine::Add_H2_part(){
     }
 
 
+    _factor= - (U_p - J_H*0.5);
     //H2 part2
+    int orb1_OP[8];
+    int orb2_OP[8];
+    int spin1_OP[8];
+    int spin2_OP[8];
+    //Remember orb1_OP,spin1_OP is for Cdag_{orb1_OP,spin1_OP}  inside <CdadC>
+    //Remember orb2_OP,spin2_OP is for C_{orb2_OP,spin2_OP}  inside <CdadC>
+    //Remember orb1,spin1 is for Cdag_{orb1,spin1}  inside CdadC
+    //Remember orb2,spin2 is for C_{orb2,spin2}  inside CdadC
+
+
+    for(int x_i=0;x_i<Length_x;x_i++){
+        for(int y_i=0;y_i<Length_y;y_i++){
+            for(int orb_beta=0;orb_beta<N_orb;orb_beta++){
+                for(int orb_alpha=0;orb_alpha<orb_beta;orb_alpha++){
+
+
+                orb1_OP={orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta};
+                orb2_OP={orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha};
+
+                spin1_OP={_SPIN_UP,_SPIN_UP,_SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_UP,_SPIN_DN,_SPIN_DN};
+                spin2_OP={_SPIN_UP,_SPIN_UP,_SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_DN};
+
+
+
+                for(int index=0;index<8;index++){
+
+                    j=x_i + Length_x*y_i + Length_x*Length_y*orb2_OP[index] +
+                            Length_x*Length_y*N_orb*spin2_OP[index];
+                    jp=x_i + Length_x*y_i + Length_x*Length_y*orb1_OP[index] +
+                            Length_x*Length_y*N_orb*spin1_OP[index];
+
+                    Hamiltonian[j][jp] = Hamiltonian[j][jp] +
+                                        _factor*
+                            CdagC[x_i][y_i][orb1_OP[index]][orb2_OP[index]][spin1_OP[index]][spin2_OP[index]];
+
+
+                             }
+
+                }
+            }
+        }
+    }
+
+
+
+
+}
+
+
+void Hartree_Fock_Engine::Add_H3_part(){
+
+
+    double _factor;
+
+
+    //Remember orb1_OP,spin1_OP is for Cdag_{orb1_OP,spin1_OP}  inside <CdadC>
+    //Remember orb2_OP,spin2_OP is for C_{orb2_OP,spin2_OP}  inside <CdadC>
+    //Remember orb1,spin1 is for Cdag_{orb1,spin1}  inside CdadC
+    //Remember orb2,spin2 is for C_{orb2,spin2}  inside CdadC
+
+
+    int orb1_OP[12];
+    int orb2_OP[12];
+    int spin1_OP[12];
+    int spin2_OP[12];
+
+    int orb1[12];
+    int orb2[12];
+    int spin1[12];
+    int spin2[12];
+
+    //H3 part1
+    _factor = -J_H/2;
+    for(int x_i=0;x_i<Length_x;x_i++){
+        for(int y_i=0;y_i<Length_y;y_i++){
+            for(int orb_beta=0;orb_beta<N_orb;orb_beta++){
+                for(int orb_alpha=0;orb_alpha<orb_beta;orb_alpha++){
+
+
+                orb1_OP={orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta,
+                         orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta};
+                orb1={orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha,
+                      orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha};
+
+
+                spin1_OP={_SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_UP,
+                          _SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_DN};
+                spin2_OP={_SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_DN,_SPIN_UP,_SPIN_UP,
+                          _SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_DN};
+
+                spin1={_SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_DN,_SPIN_UP,_SPIN_UP,
+                       _SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_UP,_SPIN_DN,_SPIN_DN};
+                spin2={_SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_UP,
+                       _SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_UP,_SPIN_DN,_SPIN_DN};
+
+
+
+
+                for(int index=0;index<12;index++){
+
+                    if(index<4){
+                       _factor = 2*_factor;
+                    }
+
+                    if(index>5 && index<10){
+                       _factor = -1.0*_factor;
+                    }
+
+                    j=x_i + Length_x*y_i + Length_x*Length_y*orb1[index] +
+                            Length_x*Length_y*N_orb*spin1[index];
+                    jp=x_i + Length_x*y_i + Length_x*Length_y*orb1[index] +
+                            Length_x*Length_y*N_orb*spin2[index];
+
+                    Hamiltonian[j][jp] = Hamiltonian[j][jp] +
+                                        _factor*
+                            CdagC[x_i][y_i][orb1_OP[index]][orb1_OP[index]][spin1_OP[index]][spin2_OP[index]];
+
+
+                             }
+
+                }
+            }
+        }
+    }
+
+
+    //H3 part2
+    _factor = J_H/2;
+    for(int x_i=0;x_i<Length_x;x_i++){
+        for(int y_i=0;y_i<Length_y;y_i++){
+            for(int orb_beta=0;orb_beta<N_orb;orb_beta++){
+                for(int orb_alpha=0;orb_alpha<orb_beta;orb_alpha++){
+
+
+                orb1_OP={orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta,
+                         orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta};
+                orb2_OP={orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha,
+                      orb_beta,orb_alpha,orb_beta,orb_alpha,orb_beta,orb_alpha};
+
+
+                spin1_OP={_SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_UP,
+                          _SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_DN};
+                spin2_OP={_SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_UP,
+                          _SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_UP,_SPIN_DN,_SPIN_DN};
+
+
+                for(int index=0;index<12;index++){
+
+                    if(index<4){
+                       _factor = 2*_factor;
+                    }
+
+                    if(index>5 && index<10){
+                       _factor = -1.0*_factor;
+                    }
+
+                    j=x_i + Length_x*y_i + Length_x*Length_y*orb2_OP[index] +
+                            Length_x*Length_y*N_orb*spin2_OP[index];
+                    jp=x_i + Length_x*y_i + Length_x*Length_y*orb1_OP[index] +
+                            Length_x*Length_y*N_orb*spin1_OP[index];
+
+                    Hamiltonian[j][jp] = Hamiltonian[j][jp] +
+                                        _factor*
+                            CdagC[x_i][y_i][orb1_OP[index]][orb2_OP[index]][spin1_OP[index]][spin2_OP[index]];
+
+
+                             }
+
+                }
+            }
+        }
+    }
+
+
+
+}
+
+
+void Hartree_Fock_Engine::Add_H4_part(){
+
+double _factor;
+
+//Remember orb1_OP,spin1_OP is for Cdag_{orb1_OP,spin1_OP}  inside <CdadC>
+//Remember orb2_OP,spin2_OP is for C_{orb2_OP,spin2_OP}  inside <CdadC>
+//Remember orb1,spin1 is for Cdag_{orb1,spin1}  inside CdadC
+//Remember orb2,spin2 is for C_{orb2,spin2}  inside CdadC
+
+
+int orb1_OP[4];
+int orb2_OP[4];
+int spin1_OP[4];
+int spin2_OP[4];
+
+int orb1[4];
+int orb2[4];
+int spin1[4];
+int spin2[4];
+
+//H4 part1
+_factor = J_H;
+for(int x_i=0;x_i<Length_x;x_i++){
+    for(int y_i=0;y_i<Length_y;y_i++){
+        for(int orb_beta=0;orb_beta<N_orb;orb_beta++){
+            for(int orb_alpha=0;orb_alpha<orb_beta;orb_alpha++){
+
+
+            orb1_OP={orb_alpha,orb_alpha,orb_beta,orb_beta};
+            orb2_OP={orb_beta,orb_beta,orb_alpha,orb_alpha};
+
+
+            spin1_OP={_SPIN_UP,_SPIN_DN,_SPIN_UP,_SPIN_DN};
+            spin2_OP={_SPIN_DN,_SPIN_UP,_SPIN_DN,_SPIN_UP};
+
+
+
+            for(int index=0;index<4;index++){
+
+                   _factor = -1.0*_factor;
+
+
+                j=x_i + Length_x*y_i + Length_x*Length_y*orb1_OP[index] +
+                        Length_x*Length_y*N_orb*spin2_OP[index];
+                jp=x_i + Length_x*y_i + Length_x*Length_y*orb2_OP[index] +
+                        Length_x*Length_y*N_orb*spin1_OP[index];
+
+                Hamiltonian[j][jp] = Hamiltonian[j][jp] +
+                                    _factor*
+                        CdagC[x_i][y_i][orb1_OP[index]][orb2_OP[index]][spin1_OP[index]][spin2_OP[index]];
+
+
+                         }
+
+            }
+        }
+    }
+}
+
+
+//H4 part1
+_factor = J_H;
+for(int x_i=0;x_i<Length_x;x_i++){
+    for(int y_i=0;y_i<Length_y;y_i++){
+        for(int orb_beta=0;orb_beta<N_orb;orb_beta++){
+            for(int orb_alpha=0;orb_alpha<orb_beta;orb_alpha++){
+
+
+            orb1_OP={orb_alpha,orb_alpha,orb_beta,orb_beta};
+            orb2_OP={orb_beta,orb_beta,orb_alpha,orb_alpha};
+
+
+            spin1_OP={_SPIN_UP,_SPIN_DN,_SPIN_DN,_SPIN_UP};
+            spin1={_SPIN_DN,_SPIN_UP,_SPIN_UP,_SPIN_DN};
+
+
+
+            for(int index=0;index<4;index++){
+
+
+                j=x_i + Length_x*y_i + Length_x*Length_y*orb1_OP[index] +
+                        Length_x*Length_y*N_orb*spin1[index];
+                jp=x_i + Length_x*y_i + Length_x*Length_y*orb2_OP[index] +
+                        Length_x*Length_y*N_orb*spin1[index];
+
+                Hamiltonian[j][jp] = Hamiltonian[j][jp] +
+                                    _factor*
+                        CdagC[x_i][y_i][orb1_OP[index]][orb2_OP[index]][spin1_OP[index]][spin1_OP[index]];
+
+
+                         }
+
+            }
+        }
+    }
+}
+
+
+
 
 
 }

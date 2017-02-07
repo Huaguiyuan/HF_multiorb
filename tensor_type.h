@@ -1,11 +1,15 @@
 #include <vector>
 #include <complex>
+#include "mkl_spblas.h"
+#include <mkl_types.h>
+#include <mkl_cblas.h>
+#include <mkl_lapacke.h>
 using namespace std;
 #ifndef sparsedefined
 #define sparsedefined
 
 //#define type_double double
-#define type_double complex<double>
+#define type_double double
 
 typedef vector< complex<double> >  Mat_1_Complex_doub;
 typedef vector<Mat_1_Complex_doub> Mat_2_Complex_doub;

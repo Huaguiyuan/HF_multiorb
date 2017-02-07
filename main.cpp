@@ -11,7 +11,7 @@
 using namespace std; 
 
 
-int main(int argc, char** argv)
+int main()
 {
 
 
@@ -20,9 +20,17 @@ int main(int argc, char** argv)
     HF_Engine.read_INPUT();
     HF_Engine.Initialize_parameters();
     HF_Engine.Initialize_Tensors();
+    HF_Engine.Create_Hopping_connections();
+
+
+    //put inside HF loops later-------
+    HF_Engine.Construct_Hamiltonian();
+
+    HF_Engine.Diagonalize_Hamiltonian();
+    //---------------------------------
 
     bool Convergence_gained;
-    Convergence_gained=false;
+    Convergence_gained=true;
     //Start doing Hartree Fock calculation--------------------------------------//
 
     while(Convergence_gained==false)

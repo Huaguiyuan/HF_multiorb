@@ -6,33 +6,47 @@
 #include <sstream>
 #include <vector>
 #include <complex>
+#include <assert.h>
 #include "Engine.h"
+#include "iconprint.h"
 
 using namespace std; 
 
 
-int main()
+int main(int argc, char** argv )
 {
+    iconprint();
+
+    cout<<"Using Hamiltonian parameters from input file = "<<argv[1]<<endl;
+    cout<<"Using Initial guess for order parameters from input file = "<<argv[2]<<endl;
+
 
 
     Hartree_Fock_Engine HF_Engine;
 
+
+    HF_Engine.FILE_HAMIL_PARAM = argv[1];
+    HF_Engine.FILE_ORDER_PARAM = argv[2];
+    HF_Engine.FILE_ORDER_PARAM_OUT = argv[3];
+
+
+
     HF_Engine.read_INPUT();
+
     HF_Engine.Initialize_parameters();
+
+
+
     HF_Engine.Initialize_Tensors();
     HF_Engine.Create_Hopping_connections();
 
 
-    //put inside HF loops later-------
-    HF_Engine.Construct_Hamiltonian();
 
-    HF_Engine.Diagonalize_Hamiltonian();
-    //---------------------------------
 
     bool Convergence_gained;
-    Convergence_gained=true;
+    Convergence_gained=false;
     //Start doing Hartree Fock calculation--------------------------------------//
-
+    int iteration=0;
     while(Convergence_gained==false)
     {
         HF_Engine.Construct_Hamiltonian();
@@ -43,13 +57,13 @@ int main()
 
 
 
-
-
+        if(HF_Engine._CONVERGENCE_GLOBAL==false){
     //checking if Engine should continue to run or stop----------------------------//
-        if( (HF_Engine.diff_n_up > HF_Engine.Convergence_error_n_up)
-                || (HF_Engine.diff_n_up > HF_Engine.Convergence_error_n_dn) )
+        if( (HF_Engine.diff_n_up >= HF_Engine.Convergence_error_n_up)
+                || (HF_Engine.diff_n_up >= HF_Engine.Convergence_error_n_dn) )
         {
             Convergence_gained=false;
+            HF_Engine.Guess_new_input();
         }
         else
         {
@@ -57,12 +71,31 @@ int main()
         }
 
      //---------------------------------------------------------------------------//
+        }
+        else{
 
+            if( HF_Engine.diff_OP_global >= HF_Engine.Convergence_error_global )
+            {
+                Convergence_gained=false;
+                HF_Engine.Guess_new_input();
+            }
+            else
+            {
+                Convergence_gained=true;
+            }
+        }
+
+    cout<<iteration<<"    "<<HF_Engine.diff_OP_global<<endl;
+    iteration++;
     }
 
+    //Hartree Fock convergence achieved-----------------------------------------//
+    HF_Engine.Write_Order_Params();
 
-    //Hartree Fock calculation done----------------------------------------------//
+    //Observables calulation starts----------------------------------------------//
 
+
+    //---------------------------------------------------------------------------//
 
     return 0;
 }

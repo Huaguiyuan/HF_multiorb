@@ -29,13 +29,14 @@ public:
 
     int Length_x, Length_y, Length_z, Size, Hamil_Size, Hamil_Sizeby2; //No of sites in x,y,z dir
     int N_orb;    //No of orbitals
-    int N_e_PerSite, N_e_Total;    //No of  e's per site and total
+    int N_e_PerSite,N_e_Total;    //No of  e's per site and total
     Mat_2_doub Hamiltonian;
     Mat_2_doub Eigenvectors;
     Mat_1_doub Evals;
     Mat_2_doub Hopping_connections;
     int _SPIN_UP;
     int _SPIN_DN;
+    double Total_energy,Total_N_exp;
 
 
     double U, U_p, J_H;   //U,U_p=Onsite coloumbic int, J_H=Onsite Hunds coupling(See Notes)
@@ -44,10 +45,16 @@ public:
 
     double Convergence_error_n_up, Convergence_error_n_dn; //Convergence_errors for order parameters
     double Convergence_error_global;
+    double Convergence_error_energy;
     double diff_OP_global;
     double diff_n_up, diff_n_dn;
+    double diff_energy;
+    double E_new, E_old;
     double Alpha_n_up, Alpha_n_dn;
     double SM_alpha;
+    double Energy_precision;
+    bool _Finite_Temp_bool;
+    double Temperature_value;
 
 
     bool Simple_Mixing_bool, Broyden_bool;
@@ -93,6 +100,9 @@ public:
     void Distance_global();
     void Guess_new_input();
     void Write_Order_Params();
+    double Fermi_function(int i);
+    void comb(int N, int K, Mat_2_doub & Sets);
+    void Degeneracy_at_Fermi_level(int & i_min,int & i_max,int & N_Fermi);
     //-------------------------------------------------------------------//
 
 };
@@ -105,6 +115,8 @@ void Hartree_Fock_Engine::read_INPUT(){
     Length_z = 1;
     N_orb = 3;
     N_e_PerSite = 4;
+    //N_e_Total=N_e_PerSite*Length_x*Length_y*Length_z;
+    N_e_Total=1;
     onsite_potential.resize(2*N_orb*Length_x*Length_y*Length_z);
     //    for(int i=0;i<2*N_orb*Length_x*Length_y*Length_z;i++){
     //        onsite_potential[i]= 0;
@@ -117,26 +129,30 @@ void Hartree_Fock_Engine::read_INPUT(){
                             Length_x*Length_y*orb +
                             Length_x*Length_y*N_orb*spin;
                     if(orb==0){
-                        onsite_potential[j]= -0.1;}
+                        onsite_potential[j]= 100000000;//-0.1;
+                    }
                     if(orb==1){
                         onsite_potential[j]= 0;
                     }
                     if(orb==2){
-                        onsite_potential[j]= 0.8;
+                        onsite_potential[j]= 100000000;//0.8;
                     }
 
                 }}}}
 
-
-    N_e_Total=N_e_PerSite*Length_x*Length_y*Length_z;
     Simple_Mixing_bool = true;
     Broyden_bool = false;
     Convergence_error_n_up=1e-6;
     Convergence_error_n_dn=1e-6;
     Convergence_error_global=1e-6;
+    Convergence_error_energy=1e-6;
     RANDOM_INITAL_GUESS=true;
     _MODEL="Pnictides_3orb";
-    U=200;
+    Energy_precision=1e-6;
+    _Finite_Temp_bool=true;
+    Temperature_value=1e-3;
+    //to do finite temperature, have to gain convergence in total N also.
+    U=10;
     J_H=U/4.0;
     U_p=U-2*J_H; //
     SM_alpha=0.5;
@@ -147,9 +163,15 @@ void Hartree_Fock_Engine::read_INPUT(){
     for(int i=0;i<3;i++){
         T_matrix[i].resize(3);
     }
-    T_matrix[0][0]=-0.5;T_matrix[0][1]=0;T_matrix[0][2]=0.1;
-    T_matrix[1][0]=0;T_matrix[1][1]=-0.5;T_matrix[1][2]=0.1;
-    T_matrix[2][0]=0.1;T_matrix[2][1]=0.1;T_matrix[2][2]=-0.15;
+
+//    T_matrix[0][0]=-0.5;T_matrix[0][1]=0;T_matrix[0][2]=0.1;
+//    T_matrix[1][0]=0;T_matrix[1][1]=-0.5;T_matrix[1][2]=0.1;
+//    T_matrix[2][0]=0.1;T_matrix[2][1]=0.1;T_matrix[2][2]=-0.15;
+
+
+    T_matrix[0][0]=0;T_matrix[0][1]=0;T_matrix[0][2]=0;
+    T_matrix[1][0]=0;T_matrix[1][1]=1;T_matrix[1][2]=0;
+    T_matrix[2][0]=0;T_matrix[2][1]=0;T_matrix[2][2]=0;
 
     _CONVERGENCE_GLOBAL=true;
 
@@ -187,7 +209,7 @@ void Hartree_Fock_Engine::Initialize_parameters(){
     _SPIN_UP=0;
     _SPIN_DN=1;
     Size=Length_x*Length_y*Length_z;
-    N_e_Total= N_e_PerSite*Size;
+   // N_e_Total= N_e_PerSite*Size;
     Hamil_Size=2*N_orb*Size;
     Hamil_Sizeby2=N_orb*Size;
 
@@ -346,7 +368,37 @@ void Hartree_Fock_Engine::Diagonalize_Hamiltonian(){
 
 }
 
+double Hartree_Fock_Engine::Fermi_function(int i){
+
+    double val;
+   double mu_N=Evals[N_e_Total];
+   double beta;
+   beta=1.0/Temperature_value; //for kb=1;
+   if(_Finite_Temp_bool==false){
+   if(Evals[i]<mu_N-Energy_precision){
+    val=1.0;
+   }
+   else if(Evals[i]>mu_N-Energy_precision && Evals[i]<mu_N+Energy_precision){
+   val=0.5;
+   }
+   else{
+   val=0;
+   }
+   }
+
+   else{
+    val=1.0/(exp(beta*(Evals[i]-mu_N)) + 1.0);
+   }
+
+return val;
+}
+
+
 void Hartree_Fock_Engine::Calculate_order_parameters_out(){
+
+    int i_min, i_max, N_Fermi;
+    Mat_2_doub Sets;
+    double norm_Fermi;
 
     for(int xi=0;xi<Length_x;xi++){
         for(int yi=0;yi<Length_y;yi++){
@@ -363,6 +415,8 @@ void Hartree_Fock_Engine::Calculate_order_parameters_out(){
     }
 
 
+    Degeneracy_at_Fermi_level(i_min,i_max,N_Fermi);
+
     int j,jp;
     for(int xi=0;xi<Length_x;xi++){
         for(int yi=0;yi<Length_y;yi++){
@@ -370,21 +424,87 @@ void Hartree_Fock_Engine::Calculate_order_parameters_out(){
                 for(int o2=0;o2<N_orb;o2++){
                     for(int s1=0;s1<2;s1++){
                         for(int s2=0;s2<2;s2++){
-                            for(int i=0;i<N_e_Total;i++){
 
-                                j=xi + Length_x*yi + Length_x*Length_y*o1 +
-                                        Length_x*Length_y*N_orb*s1;
-                                jp=xi + Length_x*yi + Length_x*Length_y*o2 +
-                                        Length_x*Length_y*N_orb*s2;
+                            j=xi + Length_x*yi + Length_x*Length_y*o1 +
+                                    Length_x*Length_y*N_orb*s1;
+                            jp=xi + Length_x*yi + Length_x*Length_y*o2 +
+                                    Length_x*Length_y*N_orb*s2;
+
+
+                            for(int i=0;i<i_min;i++){
+
                                 CdagC_out[xi][yi][o1][o2][s1][s2]=CdagC_out[xi][yi][o1][o2][s1][s2] +
                                         Eigenvectors[i][j]*Eigenvectors[i][jp];
+
                             }
+
+                            //comb(i_max-i_min+1,N_Fermi,Sets);
+                            norm_Fermi=1.0/(i_max-i_min+1);
+                             for(int i=i_min;i<=i_max;i++){
+                                 CdagC_out[xi][yi][o1][o2][s1][s2]=CdagC_out[xi][yi][o1][o2][s1][s2] +
+                                         (Eigenvectors[i][j]*Eigenvectors[i][jp])*norm_Fermi;
+                             }
+
+
+
+//                           comb(i_max-i_min+1,N_Fermi,Sets);
+//                           norm_Fermi=1.0/Sets.size();
+//                           for(int is=0;is<Sets.size();is++){
+//                            for(int i=0;i<Sets[is].size();i++){
+//                                CdagC_out[xi][yi][o1][o2][s1][s2]=CdagC_out[xi][yi][o1][o2][s1][s2] +
+//                                        (Eigenvectors[Sets[is][i]][j]*Eigenvectors[Sets[is][i]][jp])*norm_Fermi;
+//                            }
+//                           }
+
+//                            for(int i=0;i<N_e_Total;i++){
+
+//                                CdagC_out[xi][yi][o1][o2][s1][s2]=CdagC_out[xi][yi][o1][o2][s1][s2] +
+//                                        Eigenvectors[i][j]*Eigenvectors[i][jp];
+
+//                            }
+
+
+
                         }
                     }
                 }
             }
         }
     }
+
+    Total_energy=0;
+    for(double i=0;i<N_e_Total;i++){
+
+        Total_energy=Total_energy+Evals[i];
+
+    }
+
+    E_new=Total_energy;
+    diff_energy=fabs(E_new-E_old);
+
+    Total_N_exp=0;
+    for(int xi=0;xi<Length_x;xi++){
+        for(int yi=0;yi<Length_y;yi++){
+            for(int o1=0;o1<N_orb;o1++){
+                for(int o2=0;o2<N_orb;o2++){
+                    for(int s1=0;s1<2;s1++){
+                        for(int s2=0;s2<2;s2++){
+
+                            j=xi + Length_x*yi + Length_x*Length_y*o1 +
+                                    Length_x*Length_y*N_orb*s1;
+                            jp=xi + Length_x*yi + Length_x*Length_y*o2 +
+                                    Length_x*Length_y*N_orb*s2;
+                            if(j==jp){
+                                Total_N_exp=Total_N_exp+CdagC_out[xi][yi][o1][o2][s1][s2];
+                            }
+
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     if(_CONVERGENCE_GLOBAL==true){
         Distance_global();}
@@ -427,6 +547,9 @@ void Hartree_Fock_Engine::Add_Kinetic_E_part(){
     for(int j=0;j<Hamil_Size;j++){
         for(int jp=0;jp<Hamil_Size;jp++){
             Hamiltonian[j][jp] = Hamiltonian[j][jp] + Hopping_connections[j][jp];
+            if(j==jp){
+                Hamiltonian[j][jp] = Hamiltonian[j][jp] +onsite_potential[j];
+            }
         }
     }
 
@@ -438,21 +561,30 @@ void Hartree_Fock_Engine::Add_H1_part(){
 
     int j;
     //Hartree term
+    if(true){
     for(int x_i=0;x_i<Length_x;x_i++){
         for(int y_i=0;y_i<Length_y;y_i++){
             for(int orb=0;orb<N_orb;orb++){
                 for(int spin=0;spin<2;spin++){
+                    int spin2;
+                    if(spin==0){
+                        spin2=1;
+                    }
+                    else{
+                        spin2=0;
+                    }
                     j=x_i + Length_x*y_i + Length_x*Length_y*orb +
                             Length_x*Length_y*N_orb*spin;
-                    Hamiltonian[j][j] = Hamiltonian[j][j] + U*CdagC_in[x_i][y_i][orb][orb][spin][spin];
+                    Hamiltonian[j][j] = Hamiltonian[j][j] + U*CdagC_in[x_i][y_i][orb][orb][spin2][spin2];
                 }
             }
         }
     }
-
+    }
 
 
     //Fock term
+    if(true){
     for(int x_i=0;x_i<Length_x;x_i++){
         for(int y_i=0;y_i<Length_y;y_i++){
             for(int orb=0;orb<N_orb;orb++){
@@ -470,7 +602,7 @@ void Hartree_Fock_Engine::Add_H1_part(){
             }
         }
     }
-
+    }
 
 }
 
@@ -898,7 +1030,9 @@ void Hartree_Fock_Engine::Distance_global()
                     for(int s1=0;s1<2;s1++){
                         for(int s2=0;s2<2;s2++){
 
-                            diff_OP_global=fabs(CdagC_in[xi][yi][o1][o2][s1][s2]-CdagC_out[xi][yi][o1][o2][s1][s2]);
+                            diff_OP_global=diff_OP_global+
+                                    fabs((CdagC_in[xi][yi][o1][o2][s1][s2])-
+                                         (CdagC_out[xi][yi][o1][o2][s1][s2]));
                         }
                     }
                 }
@@ -937,6 +1071,7 @@ void Hartree_Fock_Engine::Write_Order_Params(){
 
     ofstream outfile( FILE_ORDER_PARAM_OUT.c_str());
 
+
     for(int xi=0;xi<Length_x;xi++){
         for(int yi=0;yi<Length_y;yi++){
             for(int o1=0;o1<N_orb;o1++){
@@ -972,5 +1107,54 @@ void Hartree_Fock_Engine::Write_Order_Params(){
     }
 
 
+
+}
+
+void Hartree_Fock_Engine::comb(int N, int K, Mat_2_doub & Sets)
+{
+    std::string bitmask(K, 1); // K leading 1's
+    bitmask.resize(N, 0); // N-K trailing 0's
+    int set_n=1;
+    int j;
+    // print integers and permute bitmask
+    do {
+        Sets.resize(set_n);
+        Sets[set_n-1].resize(K);
+        j=0;
+        for (int i = 0; i < N; ++i) // [0..N-1] integers
+        {
+
+            if (bitmask[i]) {
+                //std::cout << " " << i;
+                Sets[set_n-1][j]=i;
+                j=j+1;
+                }
+
+        }
+        //std::cout << std::endl;
+        set_n++;
+    } while (std::prev_permutation(bitmask.begin(), bitmask.end()));
+}
+
+void Hartree_Fock_Engine::Degeneracy_at_Fermi_level(int & i_min,int & i_max,int & N_Fermi){
+
+    double Fermi_energy;
+    int n_fl;
+    Fermi_energy=Evals[N_e_Total-1];
+
+    vector<int> Fermi_levels;
+    for(int i=0;i<Evals.size();i++)
+    {
+        if(Evals[i]<=Fermi_energy+Energy_precision &&
+           Evals[i]>=Fermi_energy-Energy_precision)
+        {
+        Fermi_levels.push_back(i);
+        }
+    }
+
+    i_min=Fermi_levels[0];
+    n_fl = Fermi_levels.size();
+    i_max = Fermi_levels[n_fl-1];
+    N_Fermi=N_e_Total-i_min;
 
 }

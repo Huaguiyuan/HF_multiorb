@@ -47,6 +47,7 @@ int main(int argc, char** argv )
     Convergence_gained=false;
     //Start doing Hartree Fock calculation--------------------------------------//
     int iteration=0;
+    HF_Engine.diff_energy=1.0;
     while(Convergence_gained==false)
     {
         HF_Engine.Construct_Hamiltonian();
@@ -55,7 +56,7 @@ int main(int argc, char** argv )
 
         HF_Engine.Calculate_order_parameters_out();
 
-
+        HF_Engine.E_old=HF_Engine.E_new;
 
         if(HF_Engine._CONVERGENCE_GLOBAL==false){
     //checking if Engine should continue to run or stop----------------------------//
@@ -74,18 +75,25 @@ int main(int argc, char** argv )
         }
         else{
 
-            if( HF_Engine.diff_OP_global >= HF_Engine.Convergence_error_global )
+            if(
+               (HF_Engine.diff_OP_global < HF_Engine.Convergence_error_global)
+                    &&
+               (HF_Engine.diff_energy < HF_Engine.Convergence_error_energy)
+              )
+            {
+                Convergence_gained=true;
+
+            }
+            else
             {
                 Convergence_gained=false;
                 HF_Engine.Guess_new_input();
             }
-            else
-            {
-                Convergence_gained=true;
-            }
         }
 
-    cout<<iteration<<"    "<<HF_Engine.diff_OP_global<<endl;
+    cout.precision(20);
+    cout<<iteration<<"    "<<HF_Engine.diff_OP_global<<"    ";
+    cout<<HF_Engine.Total_energy<<"    "<<HF_Engine.diff_energy<<"     "<<HF_Engine.Total_N_exp<<endl;
     iteration++;
     }
 

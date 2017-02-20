@@ -2,4 +2,7 @@ a.out
 main.cpp
 Engine.h
 tensor_type.h
+iconprint.h
 README.md
+reading_input.cpp
+reading_input.h
